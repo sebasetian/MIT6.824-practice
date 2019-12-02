@@ -45,7 +45,11 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 func wrapper(registerChan chan string, args DoTaskArgs, wg *sync.WaitGroup) {
 	reg := <-registerChan
-	call(reg, "Worker.DoTask", args, nil)
-	wg.Done()
-	registerChan <- reg
+	if ok := call(reg, "Worker.DoTask", args, nil); !ok {
+		wrapper(registerChan, args, wg)
+		registerChan <- reg
+	} else {
+		wg.Done()
+		registerChan <- reg
+	}
 }
