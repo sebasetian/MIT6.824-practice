@@ -1,5 +1,19 @@
 package mapreduce
 
+import (
+	"encoding/json"
+	"os"
+	"sort"
+)
+
+// ByKey implements sort.Interface for []KeyValue based on
+// the Key field.
+type ByKey []KeyValue
+
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
+
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
 	reduceTask int, // which reduce task this is
@@ -44,4 +58,33 @@ func doReduce(
 	//
 	// Your code here (Part I).
 	//
+	var kv KeyValue
+	values := make([]KeyValue, 0)
+	for i := 0; i < nMap; i++ {
+		rName := reduceName(jobName, i, reduceTask)
+		f, err := os.Open(rName)
+		if err != nil {
+			panic(err)
+		}
+		dec := json.NewDecoder(f)
+		for err := dec.Decode(&kv); err == nil; err = dec.Decode(&kv) {
+			values = append(values, kv)
+		}
+		f.Close()
+		output, err := os.Create(outFile)
+		if err != nil {
+			panic(err)
+		}
+		enc := json.NewEncoder(output)
+		sort.Sort(ByKey(values))
+		kvs := make(map[string][]string)
+		for _, curr := range values {
+			kvs[curr.Key] = append(kvs[curr.Key], curr.Value)
+		}
+		for key := range kvs {
+			enc.Encode(KeyValue{key, reduceF(key, kvs[key])})
+		}
+		output.Close()
+	}
+
 }
